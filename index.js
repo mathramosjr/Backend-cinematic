@@ -1,69 +1,131 @@
 const express = require('express')
 const app = express()
-const { v4: uuidv4 } = require('uuid')
 const port = 3000
 
-// Aqui guardamos os dados recebidos temporariamente
-const dadosArmazenados = []
-let proximoId = 1
-
 app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
 
-// Envia os dados (GET)
-app.get('/dados', (req, res) => {
-  res.send(dadosArmazenados)
+// Armazenamento em memória
+const filmes = []
+const reviews = []
+
+let proximoIdFilme = 1
+let proximoIdReview = 1
+
+// -------- FILMES --------
+
+// Criar filme
+app.post('/filmes', (req, res) => {
+  const { titulo, genero, ano } = req.body
+
+  if (!titulo || !genero || !ano) {
+    return res.status(400).send({ erro: 'Preencha todos os campos: titulo, genero, ano' })
+  }
+
+  const novoFilme = {
+    id: proximoIdFilme++,
+    titulo,
+    genero,
+    ano
+  }
+
+  filmes.push(novoFilme)
+  res.status(201).send(novoFilme)
 })
 
-// Recebe dados (POST)
-app.post('/dados', (req, res) => {
-  const { nome, idade } = req.body
-
-  if (!nome || typeof nome !== 'string') {
-    return res.status(400).send({ erro: 'Nome inválido.' })
-  }
-
-  if (typeof idade !== 'number') {
-    return res.status(400).send({ erro: 'Idade inválida.' })
-  }
-
-  const novoDado = {
-    id: proximoId++, // ID simples, ex: 1, 2, 3...
-    nome,
-    idade
-  }
-
-  dadosArmazenados.push(novoDado)
-  res.send({ mensagem: 'Criado com sucesso!', dados: novoDado })
+// Listar filmes
+app.get('/filmes', (req, res) => {
+  res.send(filmes)
 })
 
-app.patch('/dados/:id', (req, res) => {
-  const id = parseInt(req.params.id) // ID vem da URL
-  const dado = dadosArmazenados.find(item => item.id === id)
+// Editar filme
+app.patch('/filmes/:id', (req, res) => {
+  const id = parseInt(req.params.id)
+  const filme = filmes.find(f => f.id === id)
+  if (!filme) return res.status(404).send({ erro: 'Filme não encontrado.' })
 
-  if (!dado) {
-    return res.status(404).send({ erro: 'Dado não encontrado.' })
-  }
+  const { titulo, genero, ano } = req.body
+  if (titulo) filme.titulo = titulo
+  if (genero) filme.genero = genero
+  if (ano) filme.ano = ano
 
-  const { nome, idade } = req.body
+  res.send(filme)
+})
 
-  if (nome !== undefined) {
-    if (typeof nome !== 'string') {
-      return res.status(400).send({ erro: '"nome" deve ser string.' })
+// Deletar filme (e suas reviews)
+app.delete('/filmes/:id', (req, res) => {
+  const id = parseInt(req.params.id)
+  const index = filmes.findIndex(f => f.id === id)
+  if (index === -1) return res.status(404).send({ erro: 'Filme não encontrado.' })
+
+  filmes.splice(index, 1)
+
+  // Remover reviews associadas
+  for (let i = reviews.length - 1; i >= 0; i--) {
+    if (reviews[i].filmeId === id) {
+      reviews.splice(i, 1)
     }
-    dado.nome = nome // atualiza o nome
   }
 
-  if (idade !== undefined) {
-    if (typeof idade !== 'number') {
-      return res.status(400).send({ erro: '"idade" deve ser número.' })
-    }
-    dado.idade = idade // atualiza a idade
-  }
-
-  res.send({ mensagem: 'Dado atualizado com sucesso!', dados: dado })
+  res.send({ mensagem: 'Filme e reviews apagados.' })
 })
 
+// -------- REVIEWS --------
+
+// Criar review para um filme
+app.post('/filmes/:filmeId/reviews', (req, res) => {
+  const filmeId = parseInt(req.params.filmeId)
+  const filme = filmes.find(f => f.id === filmeId)
+  if (!filme) return res.status(404).send({ erro: 'Filme não encontrado.' })
+
+  const { autor, comentario, nota } = req.body
+  if (!autor || !comentario || typeof nota !== 'number') {
+    return res.status(400).send({ erro: 'Campos obrigatórios: autor, comentario, nota (número).' })
+  }
+
+  const novaReview = {
+    id: proximoIdReview++,
+    filmeId,
+    autor,
+    comentario,
+    nota
+  }
+
+  reviews.push(novaReview)
+  res.status(201).send(novaReview)
+})
+
+// Listar reviews de um filme
+app.get('/filmes/:filmeId/reviews', (req, res) => {
+  const filmeId = parseInt(req.params.filmeId)
+  const lista = reviews.filter(r => r.filmeId === filmeId)
+  res.send(lista)
+})
+
+// Editar review
+app.patch('/reviews/:id', (req, res) => {
+  const id = parseInt(req.params.id)
+  const review = reviews.find(r => r.id === id)
+  if (!review) return res.status(404).send({ erro: 'Review não encontrada.' })
+
+  const { autor, comentario, nota } = req.body
+  if (autor) review.autor = autor
+  if (comentario) review.comentario = comentario
+  if (nota !== undefined) review.nota = nota
+
+  res.send(review)
+})
+
+// Deletar review
+app.delete('/reviews/:id', (req, res) => {
+  const id = parseInt(req.params.id)
+  const index = reviews.findIndex(r => r.id === id)
+  if (index === -1) return res.status(404).send({ erro: 'Review não encontrada.' })
+
+  reviews.splice(index, 1)
+  res.send({ mensagem: 'Review deletada com sucesso.' })
+})
+
+// Iniciar servidor
 app.listen(port, () => {
-  console.log(`App rodando na porta ${port}`)
+  console.log(`API rodando na porta ${port}`)
 })
